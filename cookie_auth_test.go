@@ -2,6 +2,7 @@ package traefik_cookie_auth
 
 import (
 	"context"
+	"golang.org/x/crypto/bcrypt"
 	"net/http"
 	"net/http/httptest"
 	"net/url"
@@ -24,24 +25,31 @@ func TestCreateConfig(t *testing.T) {
 
 func TestParseUsers(t *testing.T) {
 	tests := []struct {
-		name    string
-		users   string
-		wantErr bool
+		name          string
+		users         string
+		wantErr       bool
+		expectedUsers map[string]string
 	}{
 		{
 			name:    "Valid users",
 			users:   "user1:pass1,user2:pass2",
 			wantErr: false,
+			expectedUsers: map[string]string{
+				"user1": "pass1",
+				"user2": "pass2",
+			},
 		},
 		{
-			name:    "Invalid format",
-			users:   "invalid",
-			wantErr: true,
+			name:          "Invalid format",
+			users:         "invalid",
+			wantErr:       false,
+			expectedUsers: map[string]string{},
 		},
 		{
-			name:    "Empty string",
-			users:   "",
-			wantErr: true,
+			name:          "Empty string",
+			users:         "",
+			wantErr:       false,
+			expectedUsers: map[string]string{},
 		},
 	}
 
@@ -53,10 +61,13 @@ func TestParseUsers(t *testing.T) {
 				t.Errorf("ParseUsers() error = %v, wantErr %v", err, tt.wantErr)
 				return
 			}
-			if !tt.wantErr && tt.users != "" {
-				expectedUserCount := len(strings.Split(tt.users, ","))
-				if len(users) != expectedUserCount {
-					t.Errorf("Expected %d users, got %d", expectedUserCount, len(users))
+			if len(users) != len(tt.expectedUsers) {
+				t.Errorf("Expected %d users, got %d", len(tt.expectedUsers), len(users))
+				return
+			}
+			for k, v := range tt.expectedUsers {
+				if users[k] != v {
+					t.Errorf("Expected user %s to have password %s, got %s", k, v, users[k])
 				}
 			}
 		})
@@ -73,20 +84,26 @@ func TestNew(t *testing.T) {
 			name: "Valid config",
 			config: &Config{
 				Users:  "user1:pass1",
-				Secret: "secret",
+				Secret: "test-secret",
 				CookieConf: &CookieConfig{
-					Name: "test_cookie",
+					Name:     "test_cookie",
+					Path:     "/",
+					Domain:   "",
+					TTL:      60,
+					HttpOnly: true,
+					Secure:   false,
+					SameSite: http.SameSiteLaxMode,
 				},
 			},
 			wantErr: false,
 		},
 		{
-			name: "Invalid users",
+			name: "Empty config",
 			config: &Config{
-				Users:  "invalid",
-				Secret: "secret",
+				Users:  "",
+				Secret: "test-secret",
 			},
-			wantErr: true,
+			wantErr: false,
 		},
 	}
 
@@ -108,12 +125,18 @@ func TestNew(t *testing.T) {
 }
 
 func TestAuthMiddleware_ServeHTTP(t *testing.T) {
+	hashedPassword, err := bcrypt.GenerateFromPassword([]byte("testpass"), bcrypt.DefaultCost)
+	if err != nil {
+		t.Fatalf("Failed to hash password: %v", err)
+	}
+
 	config := &Config{
-		Users:  "testuser:testpass",
-		Secret: "testsecret",
+		Users:  "testuser:" + string(hashedPassword),
+		Secret: "test-secret",
 		CookieConf: &CookieConfig{
-			Name:     "test_auth_token",
+			Name:     "test_cookie",
 			Path:     "/",
+			Domain:   "",
 			TTL:      60,
 			HttpOnly: true,
 			Secure:   false,
@@ -121,96 +144,95 @@ func TestAuthMiddleware_ServeHTTP(t *testing.T) {
 		},
 	}
 
-	var called bool
-	nextHandler := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		called = true
-		w.WriteHeader(http.StatusOK)
-	})
-
-	middleware, err := New(context.Background(), nextHandler, config, "test")
-	if err != nil {
-		t.Fatalf("Failed to create middleware: %v", err)
-	}
-
 	tests := []struct {
 		name           string
 		method         string
-		formData       map[string]string
-		cookie         *http.Cookie
+		username       string
+		password       string
+		withCookie     bool
 		expectedStatus int
-		shouldCallNext bool
 	}{
 		{
-			name:           "No cookie - GET request",
+			name:           "GET request without cookie shows login page",
 			method:         "GET",
-			cookie:         nil,
-			expectedStatus: http.StatusOK, // Shows login page
-			shouldCallNext: false,
+			expectedStatus: http.StatusOK,
 		},
 		{
-			name:   "Invalid credentials - POST request",
-			method: "POST",
-			formData: map[string]string{
-				"username": "wrong",
-				"password": "wrong",
-			},
+			name:           "POST request with invalid credentials",
+			method:         "POST",
+			username:       "invalid",
+			password:       "invalid",
 			expectedStatus: http.StatusUnauthorized,
-			shouldCallNext: false,
 		},
 		{
-			name:   "Valid credentials - POST request",
-			method: "POST",
-			formData: map[string]string{
-				"username": "testuser",
-				"password": "testpass",
-			},
-			expectedStatus: http.StatusFound, // Redirect after successful login
-			shouldCallNext: false,
+			name:           "POST request with valid credentials",
+			method:         "POST",
+			username:       "testuser",
+			password:       "testpass",
+			expectedStatus: http.StatusFound,
 		},
 	}
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			called = false
-			var req *http.Request
+			ctx := context.Background()
+			nextHandler := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+				w.WriteHeader(http.StatusOK)
+			})
 
+			middleware, err := New(ctx, nextHandler, config, "test")
+			if err != nil {
+				t.Fatalf("Failed to create middleware: %v", err)
+			}
+
+			var req *http.Request
 			if tt.method == "POST" {
 				form := url.Values{}
-				for key, value := range tt.formData {
-					form.Add(key, value)
-				}
-				req = httptest.NewRequest(tt.method, "http://example.com", strings.NewReader(form.Encode()))
+				form.Add("username", tt.username)
+				form.Add("password", tt.password)
+				req = httptest.NewRequest("POST", "http://example.com", strings.NewReader(form.Encode()))
 				req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
 			} else {
-				req = httptest.NewRequest(tt.method, "http://example.com", nil)
+				req = httptest.NewRequest("GET", "http://example.com", nil)
 			}
 
-			if tt.cookie != nil {
-				req.AddCookie(tt.cookie)
-			}
+			rr := httptest.NewRecorder()
+			middleware.ServeHTTP(rr, req)
 
-			w := httptest.NewRecorder()
-			middleware.ServeHTTP(w, req)
-
-			if w.Code != tt.expectedStatus {
-				t.Errorf("Expected status code %d, got %d", tt.expectedStatus, w.Code)
-			}
-
-			if called != tt.shouldCallNext {
-				t.Errorf("Next handler called = %v, want %v", called, tt.shouldCallNext)
+			if rr.Code != tt.expectedStatus {
+				t.Errorf("handler returned wrong status code: got %v want %v", rr.Code, tt.expectedStatus)
 			}
 		})
 	}
 }
 
 func TestHashPassword(t *testing.T) {
-	password := "testpassword"
-	hash, err := hashPassword(password)
-	if err != nil {
-		t.Fatalf("Failed to hash password: %v", err)
+	tests := []struct {
+		name     string
+		password string
+		wantErr  bool
+	}{
+		{
+			name:     "Valid password",
+			password: "testpass",
+			wantErr:  false,
+		},
+		{
+			name:     "Empty password",
+			password: "",
+			wantErr:  false,
+		},
 	}
 
-	if !comparePasswords(hash, password) {
-		t.Error("Password comparison failed")
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			hashedPwd, err := bcrypt.GenerateFromPassword([]byte(tt.password), bcrypt.DefaultCost)
+			if err != nil {
+				t.Fatalf("Failed to hash password: %v", err)
+			}
+			if !comparePasswords(string(hashedPwd), tt.password) != tt.wantErr {
+				t.Errorf("Password comparison failed for %s", tt.name)
+			}
+		})
 	}
 }

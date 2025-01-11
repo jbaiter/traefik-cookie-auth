@@ -24,7 +24,7 @@ experimental:
   plugins:
     cookie-auth:
       moduleName: github.com/inalbilal/traefik-cookie-auth
-      version: v0.2.1
+      version: v1.0.0
 ```
 
 ### Dynamic Configuration
@@ -88,7 +88,7 @@ services:
       - "--providers.docker=true"
       - "--entrypoints.web.address=:80"
       - "--experimental.plugins.cookie-auth.modulename=github.com/inalbilal/traefik-cookie-auth"
-      - "--experimental.plugins.cookie-auth.version=v0.2.1"
+      - "--experimental.plugins.cookie-auth.version=v1.0.0"
     ports:
       - "80:80"
     volumes:
