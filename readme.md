@@ -46,6 +46,7 @@ http:
             httpOnly: true
             secure: false
             sameSite: 1
+            domain: ".yourdomain.com"
 ```
 
 ## Configuration
@@ -63,6 +64,7 @@ secret: ""
 cookieConf:
   name: "traefik_auth_token"  # Name of the cookie
   path: "/"                   # Cookie path
+  domain: ""                  # Cookie domain (e.g., ".yourdomain.com" for all subdomains)
   ttl: 60                     # Time to live in minutes
   httpOnly: true             # HttpOnly flag
   secure: false              # Set to true if using HTTPS
@@ -89,7 +91,6 @@ services:
       - "--experimental.plugins.cookie-auth.version=v0.2.1"
     ports:
       - "80:80"
-      - "8080:8080"
     volumes:
       - /var/run/docker.sock:/var/run/docker.sock
 
@@ -100,10 +101,11 @@ services:
       - "traefik.http.routers.whoami.rule=Host(`whoami.local`)"
       - "traefik.http.routers.whoami.entrypoints=web"
       - "traefik.http.routers.whoami.middlewares=cookie-auth"
-      - "traefik.http.middlewares.cookie-auth.plugin.cookie-auth.users=admin:$$2y$$05$$eWB3jfpm8U1sFPBAg5Zdg.PG2OhoCeGIWAuqDDToBcIQYYu2UlIFe"
+      - "traefik.http.middlewares.cookie-auth.plugin.cookie-auth.users=test:$$2y$$05$$eWB3jfpm8U1sFPBAg5Zdg.PG2OhoCeGIWAuqDDToBcIQYYu2UlIFe,admin:$$2y$$05$$Ac81speQ8.syxfH.uNDNoOCAN6XlH0GkzdiTtO5VLXU/2KDzMtXdq"
       - "traefik.http.middlewares.cookie-auth.plugin.cookie-auth.secret=your_secret_key"
       - "traefik.http.middlewares.cookie-auth.plugin.cookie-auth.cookieConf.name=traefik_auth_token"
       - "traefik.http.middlewares.cookie-auth.plugin.cookie-auth.cookieConf.path=/"
+      - "traefik.http.middlewares.cookie-auth.plugin.cookie-auth.cookieConf.domain=.whoami.local"
       - "traefik.http.middlewares.cookie-auth.plugin.cookie-auth.cookieConf.ttl=60"
       - "traefik.http.middlewares.cookie-auth.plugin.cookie-auth.cookieConf.httpOnly=true"
       - "traefik.http.middlewares.cookie-auth.plugin.cookie-auth.cookieConf.secure=false"

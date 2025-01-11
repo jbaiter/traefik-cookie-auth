@@ -20,6 +20,7 @@ type Config struct {
 type CookieConfig struct {
 	Name     string        `json:"name"`
 	Path     string        `json:"path"`
+	Domain   string        `json:"domain"`
 	TTL      int           `json:"ttl"`
 	HttpOnly bool          `json:"httpOnly"`
 	Secure   bool          `json:"secure"`
@@ -31,6 +32,7 @@ func CreateConfig() *Config {
 		CookieConf: &CookieConfig{
 			Name:     "traefik_auth_token",
 			Path:     "/",
+			Domain:   "",
 			TTL:      60,
 			HttpOnly: true,
 			Secure:   false,
@@ -127,6 +129,7 @@ func (a *AuthMiddleware) ServeHTTP(rw http.ResponseWriter, req *http.Request) {
 					Value:    tokenString,
 					Expires:  expirationTime,
 					Path:     a.cookieConf.Path,
+					Domain:   a.cookieConf.Domain,
 					HttpOnly: a.cookieConf.HttpOnly,
 					Secure:   a.cookieConf.Secure,
 					SameSite: a.cookieConf.SameSite,

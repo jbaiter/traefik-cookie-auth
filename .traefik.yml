@@ -20,6 +20,9 @@ testData:
     # Path where cookie is valid
     Path: "/"
     
+    # Cookie domain
+    domain: ".yourdomain.com"
+
     # Cookie lifetime in minutes
     TTL: 60
     
