@@ -1,0 +1,34 @@
+displayName: Traefik Cookie Auth
+type: middleware
+iconPath: .assets/icon.png
+
+import: github.com/inalbilal/traefik-cookie-auth
+
+summary: 'A Traefik middleware plugin that provides cookie-based authentication with JWT tokens. This middleware presents a login form for unauthenticated users and manages authentication state using secure cookies.'
+
+testData:
+  # List of users in format: username:bcrypt_hash
+  users: "admin:$2y$05$eWB3jfpm8U1sFPBAg5Zdg.PG2OhoCeGIWAuqDDToBcIQYYu2UlIFe"
+  
+  # Secret key for JWT token signing
+  secret: "your_secret_key"
+  
+  cookieConf:
+    # Cookie name used for authentication
+    Name: "traefik_auth_token"
+    
+    # Path where cookie is valid
+    Path: "/"
+    
+    # Cookie lifetime in minutes
+    TTL: 60
+    
+    # Prevents JavaScript access to cookie
+    HttpOnly: true
+    
+    # Enable for HTTPS connections
+    Secure: false
+    
+    # Cookie sharing policy:
+    # 1: Default, 2: Lax, 3: Strict, 4: None
+    SameSite: 1

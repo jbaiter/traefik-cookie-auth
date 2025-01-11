@@ -1,0 +1,30 @@
+version: '3.9'
+services:
+  traefik:
+    image: traefik:v2.11
+    command:
+      - "--api.insecure=true"
+      - "--providers.docker=true"
+      - "--entrypoints.web.address=:80"
+      - "--experimental.localplugins.cookie-auth.modulename=github.com/inalbilal/traefik-cookie-auth"
+    ports:
+      - "80:80"
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock
+      - ./:/plugins-local/src/github.com/inalbilal/traefik-cookie-auth
+
+  whoami:
+    image: traefik/whoami
+    labels:
+      - "traefik.enable=true"
+      - "traefik.http.routers.whoami.rule=Host(`whoami.local`)"
+      - "traefik.http.routers.whoami.entrypoints=web"
+      - "traefik.http.routers.whoami.middlewares=cookie-auth"
+      - "traefik.http.middlewares.cookie-auth.plugin.cookie-auth.users=admin:$$2y$$05$$eWB3jfpm8U1sFPBAg5Zdg.PG2OhoCeGIWAuqDDToBcIQYYu2UlIFe"
+      - "traefik.http.middlewares.cookie-auth.plugin.cookie-auth.secret=your_secret_key"
+      - "traefik.http.middlewares.cookie-auth.plugin.cookie-auth.cookieConf.name=traefik_auth_token"
+      - "traefik.http.middlewares.cookie-auth.plugin.cookie-auth.cookieConf.path=/"
+      - "traefik.http.middlewares.cookie-auth.plugin.cookie-auth.cookieConf.ttl=60"
+      - "traefik.http.middlewares.cookie-auth.plugin.cookie-auth.cookieConf.httpOnly=true"
+      - "traefik.http.middlewares.cookie-auth.plugin.cookie-auth.cookieConf.secure=false"
+      - "traefik.http.middlewares.cookie-auth.plugin.cookie-auth.cookieConf.sameSite=1"
